@@ -1,0 +1,16 @@
+{
+  "name": "shopee-affiliate-video-bot",
+  "version": "1.0.0",
+  "description": "ค้นหาสินค้า affiliate ขายดีจาก Shopee แล้วสร้างวิดีโอโปรโมทอัตโนมัติ",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

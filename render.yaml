@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: shopee-affiliate-video-bot
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: SHOPEE_APP_ID
+        sync: false
+      - key: SHOPEE_API_KEY
+        sync: false
+      - key: PORT
+        value: 3000
