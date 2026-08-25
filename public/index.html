@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shopee Affiliate Video Bot</title>
+<style>
+  :root { --shopee: #ee4d2d; --bg: #f6f6f6; --card: #ffffff; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); margin: 0; color: #222; }
+  header { background: var(--shopee); color: white; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 18px; margin: 0; }
+  .badge { font-size: 12px; padding: 4px 10px; border-radius: 20px; background: rgba(255,255,255,0.2); }
+  .container { max-width: 900px; margin: 0 auto; padding: 16px; }
+  .searchbar { display: flex; gap: 8px; margin-bottom: 16px; }
+  .searchbar input { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px; }
+  .searchbar button { padding: 10px 18px; border: none; border-radius: 8px; background: var(--shopee); color: white; font-weight: 600; cursor: pointer; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .card { background: var(--card); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); display: flex; flex-direction: column; }
+  .card img { width: 100%; aspect-ratio: 1/1; object-fit: cover; }
+  .card .body { padding: 10px 12px 14px; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .name { font-size: 13px; line-height: 1.4; min-height: 36px; }
+  .meta { font-size: 12px; color: #666; display: flex; justify-content: space-between; }
+  .price { color: var(--shopee); font-weight: 700; font-size: 15px; }
+  .rank { font-size: 11px; color: #999; }
+  .gen-btn { margin-top: auto; padding: 8px; border: none; border-radius: 8px; background: #222; color: white; font-size: 13px; cursor: pointer; }
+  .gen-btn:disabled { background: #aaa; cursor: default; }
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+  .modal { background: white; border-radius: 12px; max-width: 380px; width: 100%; padding: 16px; max-height: 90vh; overflow-y: auto; }
+  .modal video { width: 100%; border-radius: 8px; background: black; }
+  .modal textarea { width: 100%; min-height: 100px; margin-top: 10px; font-size: 13px; padding: 8px; border-radius: 6px; border: 1px solid #ddd; }
+  .modal .close { float: right; cursor: pointer; font-size: 20px; border: none; background: none; }
+  .link-row { display: flex; gap: 6px; margin-top: 8px; }
+  .link-row input { flex: 1; font-size: 12px; padding: 8px; border-radius: 6px; border: 1px solid #ddd; }
+  .link-row button, .modal .copy { padding: 8px 10px; border: none; border-radius: 6px; background: var(--shopee); color: white; font-size: 12px; cursor: pointer; }
+  .note { font-size: 11px; color: #999; margin-top: 10px; line-height: 1.5; }
+  .loading { text-align: center; padding: 40px; color: #999; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛍️ Shopee Affiliate Video Bot</h1>
+  <span class="badge" id="sourceBadge">โหลดข้อมูล...</span>
+</header>
+
+<div class="container">
+  <div class="searchbar">
+    <input id="keyword" placeholder="ค้นหาสินค้า เช่น หูฟัง, สกินแคร์..." />
+    <button onclick="loadProducts()">ค้นหา</button>
+  </div>
+  <div id="grid" class="grid"><div class="loading">กำลังโหลดสินค้า...</div></div>
+</div>
+
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <button class="close" onclick="closeModal()">×</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<script>
+async function loadProducts() {
+  const keyword = document.getElementById('keyword').value;
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '<div class="loading">กำลังโหลดและจัดอันดับสินค้า...</div>';
+  const res = await fetch('/api/products?keyword=' + encodeURIComponent(keyword));
+  const data = await res.json();
+  document.getElementById('sourceBadge').textContent = data.source === 'shopee_api' ? '🟢 Shopee API จริง' : '🟡 Mock data (ยังไม่ตั้งคา API)';
+  grid.innerHTML = '';
+  data.products.forEach((p, i) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <img src="${p.imageUrl}" loading="lazy" />
+      <div class="body">
+        <div class="rank">#${i + 1} สินค้าขายดี · ยอดขาย ${Number(p.sales).toLocaleString()}</div>
+        <div class="name">${p.productName}</div>
+        <div class="meta"><span class="price">฿${p.priceMin}</span><span>คอมมิชชั่น ${p.commissionRate}</span></div>
+        <button class="gen-btn" data-id="${p.itemId}">🎬 สร้างวิดีโอ</button>
+      </div>`;
+    card.querySelector('.gen-btn').onclick = (e) => generateVideo(p, e.target);
+    grid.appendChild(card);
+  });
+}
+
+async function generateVideo(p, btn) {
+  btn.disabled = true;
+  btn.textContent = 'กำลังสร้างวิดีโอ... (อาจใช้เวลาถึง 30 วิ)';
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 40000);
+  try {
+    const res = await fetch('/api/generate-video', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        itemId: p.itemId, productName: p.productName,
+        priceMin: p.priceMin, commissionRate: p.commissionRate, imageUrl: p.imageUrl,
+      }),
+      signal: controller.signal,
+    });
+    const rawText = await res.text();
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      throw new Error('เซิร์ฟเวอร์ไม่ตอบสนองตามปกติ (อาจเป็นเพราะ Render free tier ตื่นช้า/ทำงานหนักเกิน) ลองกดใหม่อีกครั้งใน 30 วิ');
+    }
+    if (!res.ok || data.error) throw new Error(data.error || `เซิร์ฟเวอร์ตอบ status ${res.status}`);
+    showModal(p, data);
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      alert('สร้างวิดีโอไม่สำเร็จ: ใช้เวลานานเกินไป ลองกดใหม่อีกครั้ง (ครั้งแรกหลัง service สลีปจะช้ากว่าปกติ)');
+    } else {
+      alert('สร้างวิดีโอไม่สำเร็จ: ' + err.message);
+    }
+  } finally {
+    clearTimeout(timeoutId);
+    btn.disabled = false;
+    btn.textContent = '🎬 สร้างวิดีโอ';
+  }
+}
+
+function showModal(p, data) {
+  const modal = document.getElementById('modalContent');
+  modal.innerHTML = `
+    <h3 style="margin-top:0;font-size:15px;">${p.productName}</h3>
+    <video src="${data.videoUrl}" controls autoplay loop muted></video>
+    <textarea id="captionBox">${data.caption}</textarea>
+    <div class="link-row">
+      <input value="${p.offerLink}" readonly id="linkBox" />
+      <button onclick="copyText('linkBox')">คัดลอกลิงก์</button>
+    </div>
+    <button class="copy" style="margin-top:8px;width:100%;" onclick="copyText('captionBox')">คัดลอกแคปชั่น</button>
+    <a href="${data.videoUrl}" download style="display:block;text-align:center;margin-top:8px;font-size:13px;color:#ee4d2d;">⬇️ ดาวน์โหลดวิดีโอ</a>
+    <p class="note">📌 ระบบเตรียมวิดีโอ+แคปชั่น+ลิงก์ให้พร้อมแล้ว ขั้นตอนอัปโหลดเข้า Shopee Video ต้องทำผ่านแอป Shopee ด้วยตัวเองนะครับ (Shopee ไม่มี API สาธารณะสำหรับโพสอัตโนมัติ และการใช้บอทอาจผดเงื่อนไขจนบัญชีถูกระงับ)</p>
+  `;
+  document.getElementById('modalBg').style.display = 'flex';
+}
+
+function closeModal() { document.getElementById('modalBg').style.display = 'none'; }
+function copyText(id) {
+  const el = document.getElementById(id);
+  el.select();
+  document.execCommand('copy');
+}
+
+loadProducts();
+</script>
+</body>
+</html>
