@@ -8,8 +8,15 @@ require("dotenv").config();
 
 const app = express();
 app.use(express.json());
+
+// สร้างโฟลเดอร์ assets/ และ videos/ เองถ้ายังไม่มี (Git ไม่เก็บโฟลเดอร์ว่าง ทำให้หายไปตอน deploy)
+const ASSETS_DIR = path.join(__dirname, "assets");
+const VIDEOS_DIR = path.join(__dirname, "videos");
+fs.mkdirSync(ASSETS_DIR, { recursive: true });
+fs.mkdirSync(VIDEOS_DIR, { recursive: true });
+
 app.use(express.static(path.join(__dirname, "public")));
-app.use("/videos", express.static(path.join(__dirname, "videos")));
+app.use("/videos", express.static(VIDEOS_DIR));
 
 const APP_ID = process.env.SHOPEE_APP_ID || "";
 const API_KEY = process.env.SHOPEE_API_KEY || "";
@@ -28,7 +35,6 @@ function buildSignedHeaders(payload) {
 }
 
 async function fetchRealProducts({ keyword = "", sortType = 2, limit = 20 }) {
-  // sortType: Shopee productOfferV2 sort — 2 = sales desc (ตรวจสอบค่าจริงจากเอกสาร Open API ของคุณ)
   const query = `
     query {
       productOfferV2(keyword: "${keyword}", sortType: ${sortType}, limit: ${limit}) {
@@ -75,7 +81,6 @@ app.get("/api/products", async (req, res) => {
     } else {
       products = getMockProducts();
     }
-    // จัดอันดับ "สินค้าขายดี": เรียงตามยอดขาย แล้วถ่วงด้วยคอมมิชชั่น
     const ranked = products
       .map((p) => ({
         ...p,
@@ -95,7 +100,7 @@ app.post("/api/generate-video", async (req, res) => {
     if (!itemId || !productName || !imageUrl) {
       return res.status(400).json({ error: "missing product fields" });
     }
-    const outFile = path.join(__dirname, "videos", `${itemId}.mp4`);
+    const outFile = path.join(VIDEOS_DIR, `${itemId}.mp4`);
     await buildVideo({ productName, price: priceMin, commissionRate, imageUrl, outFile });
     res.json({
       videoUrl: `/videos/${itemId}.mp4`,
@@ -111,11 +116,11 @@ function buildCaption(name, price, commissionRate) {
   return `🔥 ${name}\n💸 เริ่มต้นเพียง ฿${price}\n✅ สินค้าขายดี รีวิวดี\n👉 กดลิงก์ในไบโอ/แคปชั่นเพื่อสั่งซื้อ\n#shopee #ของมันต้องมี #รีวิวสินค้า`;
 }
 
-// ---------- Video builder: image + Ken Burns zoom + text overlay + royalty-free-style tone ----------
+// ---------- Video builder: image + Ken Burns zoom + text overlay ----------
 function buildVideo({ productName, price, commissionRate, imageUrl, outFile }) {
   return new Promise(async (resolve, reject) => {
     try {
-      const tmpImg = path.join(__dirname, "assets", `${Date.now()}.jpg`);
+      const tmpImg = path.join(ASSETS_DIR, `${Date.now()}.jpg`);
       const imgRes = await fetch(imageUrl);
       const buf = Buffer.from(await imgRes.arrayBuffer());
       fs.writeFileSync(tmpImg, buf);
@@ -123,8 +128,6 @@ function buildVideo({ productName, price, commissionRate, imageUrl, outFile }) {
       const safeText = productName.replace(/:/g, "").replace(/'/g, "").slice(0, 60);
       const priceText = `ราคา ${price} บาท`;
 
-      // ffmpeg: zoompan (Ken Burns) 5 วินาที 720x1280 (แนวตั้งสำหรับ Shopee Video) + ข้อความ
-      // ลดขนาด/เฟรมเรตเพื่อให้เข้ารหัสเร็วพอสำหรับ Render free tier (CPU จำกัด) และไม่ชน request timeout ของ proxy
       const args = [
         "-y",
         "-loop", "1",
@@ -139,7 +142,7 @@ function buildVideo({ productName, price, commissionRate, imageUrl, outFile }) {
         "-pix_fmt", "yuv420p",
         outFile,
       ];
-      const proc = execFile("ffmpeg", args, { timeout: 25000 }, (error, stdout, stderr) => {
+      execFile("ffmpeg", args, { timeout: 25000 }, (error, stdout, stderr) => {
         fs.unlink(tmpImg, () => {});
         if (error) {
           const detail = error.killed ? "ffmpeg ใช้เวลานานเกินไป (timeout)" : stderr.toString().slice(-500);
@@ -153,7 +156,7 @@ function buildVideo({ productName, price, commissionRate, imageUrl, outFile }) {
   });
 }
 
-// กันกรณีเกิด error ที่ไม่คาดคิด ให้ตอบกลับเป็น JSON เสมอ (ไม่ใช่หน้า HTML error ของ Express)
+// กันกรณีเกิด error ที่ไม่คาดคิด ให้ตอบกลับเป็น JSON เสมอ
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: err.message || "internal server error" });
